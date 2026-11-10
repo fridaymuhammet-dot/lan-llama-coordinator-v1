@@ -12,21 +12,27 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
     private readonly DeviceRegistryService _deviceRegistry = new();
     private readonly DevicePersistenceService _persistence = new();
     private readonly TaskQueueService _taskQueue = new();
+    private readonly TaskLifecycleService _taskLifecycle;
     private readonly string _storagePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LanLlamaCoordinator", "devices.json");
     private DeviceInfo? _selectedDevice;
+    private TaskRecord? _selectedTask;
     private string _deviceName = string.Empty;
     private string _selectedDeviceType = "Laptop";
     private string _selectedNetworkType = "Ethernet";
     private string _message = "Uygulama çalışıyor. Cihazları ekleyebilir, iş kuyruğunu izleyebilirsiniz.";
-    private TaskRecord? _selectedTask;
 
     public CoordinatorViewModel()
     {
+        _taskLifecycle = new TaskLifecycleService(_taskQueue);
+
         DeviceTypes = new ObservableCollection<string>(Enum.GetNames<DeviceType>());
         NetworkTypes = new ObservableCollection<string>(Enum.GetNames<NetworkType>());
         AddDeviceCommand = new RelayCommand(AddDevice);
         RemoveDeviceCommand = new RelayCommand(RemoveSelectedDevice);
         EnqueueSampleTaskCommand = new RelayCommand(EnqueueSampleTask);
+        AssignSelectedTaskCommand = new RelayCommand(AssignSelectedTask);
+        CompleteSelectedTaskCommand = new RelayCommand(CompleteSelectedTask);
+        RetrySelectedTaskCommand = new RelayCommand(RetrySelectedTask);
 
         var savedDevices = _persistence.Load(_storagePath);
         foreach (var device in savedDevices)
@@ -42,9 +48,13 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
     public ObservableCollection<string> DeviceTypes { get; }
     public ObservableCollection<string> NetworkTypes { get; }
     public ObservableCollection<TaskRecord> TaskQueue { get; }
+
     public ICommand AddDeviceCommand { get; }
     public ICommand RemoveDeviceCommand { get; }
     public ICommand EnqueueSampleTaskCommand { get; }
+    public ICommand AssignSelectedTaskCommand { get; }
+    public ICommand CompleteSelectedTaskCommand { get; }
+    public ICommand RetrySelectedTaskCommand { get; }
 
     public int DeviceCount => Devices.Count;
     public int TaskCount => TaskQueue.Count;
@@ -164,12 +174,74 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
             MaxRetries = 3
         };
 
-        _taskQueue.Enqueue(task);
+        _taskLifecycle.Enqueue(task);
         TaskQueue.Add(task);
 
         SelectedTask = task;
         Message = $"Örnek görev kuyruğa eklendi: {task.TaskId}";
         OnPropertyChanged(nameof(TaskCount));
+    }
+
+    private void AssignSelectedTask()
+    {
+        if (SelectedTask is null)
+        {
+            Message = "Atamak için bir görev seçin.";
+            return;
+        }
+
+        var deviceId = SelectedDevice?.DeviceId ?? Devices.FirstOrDefault()?.DeviceId ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            Message = "Görev için en az bir cihaz seçilmelidir.";
+            return;
+        }
+
+        _taskLifecycle.Assign(SelectedTask.TaskId, deviceId);
+        SelectedTask.Status = TaskStatus.Assigned;
+        SelectedTask.AssignedDeviceId = deviceId;
+        Message = $"Görev {SelectedTask.TaskId} cihaz {deviceId} için atanmıştır.";
+        TaskQueue.Clear();
+        foreach (var task in _taskQueue.GetAll())
+        {
+            TaskQueue.Add(task);
+        }
+    }
+
+    private void CompleteSelectedTask()
+    {
+        if (SelectedTask is null)
+        {
+            Message = "Tamamlamak için bir görev seçin.";
+            return;
+        }
+
+        _taskLifecycle.Complete(SelectedTask.TaskId, "Örnek sonuç başarılı şekilde tamamlandı.");
+        SelectedTask.Status = TaskStatus.Succeeded;
+        Message = $"Görev {SelectedTask.TaskId} tamamlandı.";
+        TaskQueue.Clear();
+        foreach (var task in _taskQueue.GetAll())
+        {
+            TaskQueue.Add(task);
+        }
+    }
+
+    private void RetrySelectedTask()
+    {
+        if (SelectedTask is null)
+        {
+            Message = "Yeniden denemek için bir görev seçin.";
+            return;
+        }
+
+        _taskLifecycle.Retry(SelectedTask.TaskId);
+        SelectedTask.Status = TaskStatus.Retrying;
+        Message = $"Görev {SelectedTask.TaskId} yeniden deneme için işaretlendi.";
+        TaskQueue.Clear();
+        foreach (var task in _taskQueue.GetAll())
+        {
+            TaskQueue.Add(task);
+        }
     }
 
     private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
