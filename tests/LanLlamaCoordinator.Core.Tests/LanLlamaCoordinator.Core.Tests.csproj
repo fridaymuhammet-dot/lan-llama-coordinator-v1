@@ -17,5 +17,6 @@
 
   <ItemGroup>
     <ProjectReference Include="../../src/LanLlamaCoordinator.Core/LanLlamaCoordinator.Core.csproj" />
+    <ProjectReference Include="../../src/LanLlamaCoordinator.Infrastructure/LanLlamaCoordinator.Infrastructure.csproj" />
   </ItemGroup>
 </Project>
