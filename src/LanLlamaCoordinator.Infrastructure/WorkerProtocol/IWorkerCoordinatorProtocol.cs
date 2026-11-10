@@ -15,4 +15,5 @@ public interface IWorkerCoordinatorProtocol
     TaskResultResponse SubmitResult(TaskResultRequest request);
     int RequeueExpiredLeases(DateTimeOffset nowUtc);
     TaskWorkStatus? GetTaskStatus(string taskId);
+    WorkerRunStatus? GetWorkerStatus(string workerId);
 }

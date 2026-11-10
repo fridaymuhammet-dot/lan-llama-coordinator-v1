@@ -1,3 +1,5 @@
+using LanLlamaCoordinator.Core.Contracts.Common;
+
 namespace LanLlamaCoordinator.Core.Contracts.Workers;
 
 public sealed record WorkerRegistrationRequest(

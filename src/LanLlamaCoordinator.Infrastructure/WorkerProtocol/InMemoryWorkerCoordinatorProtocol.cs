@@ -14,11 +14,11 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
     private static readonly TimeSpan HeartbeatTimeout = TimeSpan.FromSeconds(45);
     private static readonly TimeSpan LeaseDuration = TimeSpan.FromSeconds(60);
     private readonly object _gate = new();
-    private readonly Dictionary<string, PendingWorker> _pending = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, PendingWorker> _registrations = new(StringComparer.Ordinal);
     private readonly Dictionary<string, WorkerState> _workers = new(StringComparer.Ordinal);
     private readonly Dictionary<string, WorkItem> _tasks = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, TaskClaimResponse> _claimRequests = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, TaskResultResponse> _resultRequests = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ClaimRecord> _claimRequests = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, ResultRecord> _resultRequests = new(StringComparer.Ordinal);
 
     public WorkerRegistrationResponse Register(WorkerRegistrationRequest request)
     {
@@ -30,7 +30,7 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
 
         lock (_gate)
         {
-            var existing = _pending.Values.FirstOrDefault(x => x.Request.RequestId == request.RequestId);
+            var existing = _registrations.Values.FirstOrDefault(x => x.Request.RequestId == request.RequestId);
             if (existing is not null)
             {
                 return RegistrationResponse(existing);
@@ -38,7 +38,7 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
 
             var workerId = Guid.NewGuid().ToString("N");
             var pending = new PendingWorker(workerId, request);
-            _pending[workerId] = pending;
+            _registrations[workerId] = pending;
             return RegistrationResponse(pending);
         }
     }
@@ -52,26 +52,33 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
 
         lock (_gate)
         {
-            var pending = _pending.Values.FirstOrDefault(x => x.Request.RequestId == request.RequestId);
-            if (pending is null)
+            var registration = _registrations.Values.FirstOrDefault(x => x.Request.RequestId == request.RequestId);
+            if (registration is null)
             {
-                return new WorkerApprovalResponse(string.Empty, WorkerRegistrationStatus.InvalidRequest, "Pending registration was not found.");
+                return new WorkerApprovalResponse(string.Empty, WorkerRegistrationStatus.InvalidRequest, "Registration was not found.");
             }
 
-            _pending.Remove(pending.WorkerId);
+            if (registration.Status != WorkerRegistrationStatus.PendingApproval)
+            {
+                var message = registration.Status == WorkerRegistrationStatus.Rejected
+                    ? "A rejected registration cannot be approved; submit a new registration request."
+                    : "Registration has already been approved.";
+                return new WorkerApprovalResponse(registration.WorkerId, registration.Status, message);
+            }
+
             if (!request.Approve)
             {
-                pending.Status = WorkerRegistrationStatus.Rejected;
-                pending.Message = string.IsNullOrWhiteSpace(request.Reason) ? "Registration rejected by coordinator." : request.Reason;
-                _pending[pending.WorkerId] = pending;
-                return new WorkerApprovalResponse(pending.WorkerId, pending.Status, pending.Message);
+                registration.Status = WorkerRegistrationStatus.Rejected;
+                registration.Message = string.IsNullOrWhiteSpace(request.Reason)
+                    ? "Registration rejected by coordinator."
+                    : request.Reason;
+                return new WorkerApprovalResponse(registration.WorkerId, registration.Status, registration.Message);
             }
 
-            pending.Status = WorkerRegistrationStatus.Approved;
-            pending.Message = "Worker approved; waiting for its first heartbeat.";
-            _workers[pending.WorkerId] = new WorkerState(pending.Request);
-            _pending[pending.WorkerId] = pending;
-            return new WorkerApprovalResponse(pending.WorkerId, pending.Status, pending.Message);
+            registration.Status = WorkerRegistrationStatus.Approved;
+            registration.Message = "Worker approved; waiting for its first heartbeat.";
+            _workers[registration.WorkerId] = new WorkerState(registration.Request);
+            return new WorkerApprovalResponse(registration.WorkerId, registration.Status, registration.Message);
         }
     }
 
@@ -86,7 +93,7 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
         {
             if (!_workers.TryGetValue(request.WorkerId, out var worker))
             {
-                return RejectedHeartbeat("unknown_worker", "Worker is unknown or not approved.");
+                return RejectedHeartbeat("unknown_worker", "Worker is unknown, pending approval, or rejected.");
             }
 
             var now = DateTimeOffset.UtcNow;
@@ -100,9 +107,9 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
                 return RejectedHeartbeat("stale_sequence", "Heartbeat sequence number must increase.");
             }
 
-            if (!IsValid(request.CurrentCapacity))
+            if (!Enum.IsDefined(request.Status) || !IsValid(request.CurrentCapacity))
             {
-                return RejectedHeartbeat("invalid_capacity", "Heartbeat capacity values are invalid.");
+                return RejectedHeartbeat("invalid_capacity", "Heartbeat status or capacity values are invalid.");
             }
 
             worker.LastSequenceNumber = request.SequenceNumber;
@@ -117,7 +124,7 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
     {
         if (task is null || string.IsNullOrWhiteSpace(task.TaskId) || string.IsNullOrWhiteSpace(task.ModelName) ||
             string.IsNullOrWhiteSpace(task.RequiredBackend) || task.RequiredMemoryBytes < 0 ||
-            string.IsNullOrWhiteSpace(task.Prompt) || task.MaxTokens <= 0 || task.MaxAttempts <= 0)
+            string.IsNullOrWhiteSpace(task.Prompt) || task.Prompt.Length > 32_000 || task.MaxTokens <= 0 || task.MaxAttempts <= 0)
         {
             return false;
         }
@@ -136,39 +143,44 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
 
     public TaskClaimResponse ClaimTask(TaskClaimRequest request)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.WorkerId) || string.IsNullOrWhiteSpace(request.RequestId))
+        if (request is null || string.IsNullOrWhiteSpace(request.WorkerId) || string.IsNullOrWhiteSpace(request.RequestId) ||
+            request.SupportedBackends is null || request.AvailableMemoryBytes < 0)
         {
-            return ClaimError("invalid_claim", "Worker ID and request ID are required.");
+            return ClaimError("invalid_claim", "Worker ID, request ID, backend list and non-negative memory are required.");
         }
 
         lock (_gate)
         {
-            if (_claimRequests.TryGetValue(request.RequestId, out var prior))
+            var claimKey = $"{request.WorkerId}:{request.RequestId}";
+            if (_claimRequests.TryGetValue(claimKey, out var prior))
             {
-                return prior;
+                return prior.Response;
             }
 
             if (!_workers.TryGetValue(request.WorkerId, out var worker))
             {
-                return ClaimError("unknown_worker", "Worker is unknown or not approved.");
+                return ClaimError("unknown_worker", "Worker is unknown, pending approval, or rejected.");
             }
 
-            if (worker.LastHeartbeatUtc is null || DateTimeOffset.UtcNow - worker.LastHeartbeatUtc > HeartbeatTimeout || worker.LastStatus == WorkerRunStatus.Unhealthy)
+            if (worker.LastHeartbeatUtc is null || DateTimeOffset.UtcNow - worker.LastHeartbeatUtc > HeartbeatTimeout ||
+                worker.LastStatus != WorkerRunStatus.Idle)
             {
-                return ClaimError("worker_unavailable", "Worker has no recent healthy heartbeat.");
+                return ClaimError("worker_unavailable", "Worker has no recent idle heartbeat.");
             }
 
+            var effectiveMemory = Math.Min(request.AvailableMemoryBytes, worker.Capacity.AvailableMemoryBytes);
             var item = _tasks.Values
                 .Where(x => x.Status == TaskWorkStatus.Queued)
+                .Where(x => worker.Registration.SupportedBackends.Contains(x.Request.RequiredBackend, StringComparer.OrdinalIgnoreCase))
                 .Where(x => request.SupportedBackends.Contains(x.Request.RequiredBackend, StringComparer.OrdinalIgnoreCase))
-                .Where(x => request.AvailableMemoryBytes >= x.Request.RequiredMemoryBytes)
+                .Where(x => effectiveMemory >= x.Request.RequiredMemoryBytes)
                 .OrderBy(x => x.CreatedUtc)
                 .FirstOrDefault();
 
             if (item is null)
             {
                 var noWork = new TaskClaimResponse(false, null, null, "No compatible task is available.");
-                _claimRequests[request.RequestId] = noWork;
+                _claimRequests[claimKey] = new ClaimRecord(request.RequestId, noWork);
                 return noWork;
             }
 
@@ -182,7 +194,7 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
                 new ClaimedTaskDto(item.Request.TaskId, item.LeaseId, item.Attempt, item.Request.ModelName,
                     item.Request.RequiredBackend, item.Request.Prompt, item.Request.MaxTokens),
                 item.LeaseExpiresAtUtc, "Task leased to worker.");
-            _claimRequests[request.RequestId] = response;
+            _claimRequests[claimKey] = new ClaimRecord(request.RequestId, response);
             return response;
         }
     }
@@ -216,36 +228,37 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
 
     public TaskResultResponse SubmitResult(TaskResultRequest request)
     {
-        if (request is null || string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        if (request is null || string.IsNullOrWhiteSpace(request.IdempotencyKey) ||
+            string.IsNullOrWhiteSpace(request.TaskId) || string.IsNullOrWhiteSpace(request.WorkerId) ||
+            string.IsNullOrWhiteSpace(request.LeaseId) || request.Attempt <= 0 || !Enum.IsDefined(request.Status))
         {
-            return new TaskResultResponse(false, "Idempotency key is required.",
-                new ProtocolError("missing_idempotency_key", "Idempotency key is required."));
+            return ResultError("invalid_result", "Required result fields are invalid.");
         }
 
         lock (_gate)
         {
             if (_resultRequests.TryGetValue(request.IdempotencyKey, out var previous))
             {
-                return previous;
+                return previous.Request == request
+                    ? previous.Response
+                    : ResultError("idempotency_conflict", "Idempotency key was already used for a different result.");
             }
 
             if (!TryGetOwnedLease(request.TaskId, request.WorkerId, request.LeaseId, out var item) || item.Attempt != request.Attempt)
             {
-                return new TaskResultResponse(false, "Task lease is invalid or expired.",
-                    new ProtocolError("invalid_lease", "Task lease, worker, or attempt does not match."));
+                return ResultError("invalid_lease", "Task lease, worker, or attempt does not match or has expired.");
             }
 
             if (item.Status is not (TaskWorkStatus.Leased or TaskWorkStatus.Running))
             {
-                return new TaskResultResponse(false, "Task is not accepting a result.",
-                    new ProtocolError("invalid_transition", "Task is not accepting a result."));
+                return ResultError("invalid_transition", "Task is not accepting a result.");
             }
 
             item.Status = request.Status == TaskResultStatus.Succeeded ? TaskWorkStatus.Succeeded : TaskWorkStatus.Failed;
             item.Output = request.Output;
             item.ErrorCode = request.ErrorCode;
             var accepted = new TaskResultResponse(true, "Task result accepted.");
-            _resultRequests[request.IdempotencyKey] = accepted;
+            _resultRequests[request.IdempotencyKey] = new ResultRecord(request, accepted);
             return accepted;
         }
     }
@@ -285,6 +298,24 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
         }
     }
 
+    public WorkerRunStatus? GetWorkerStatus(string workerId)
+    {
+        lock (_gate)
+        {
+            if (!_workers.TryGetValue(workerId, out var worker))
+            {
+                return null;
+            }
+
+            if (worker.LastHeartbeatUtc is null || DateTimeOffset.UtcNow - worker.LastHeartbeatUtc > HeartbeatTimeout)
+            {
+                return WorkerRunStatus.Unhealthy;
+            }
+
+            return worker.LastStatus;
+        }
+    }
+
     private bool TryGetOwnedLease(string taskId, string workerId, string leaseId, out WorkItem item)
     {
         if (_tasks.TryGetValue(taskId, out var found) && found.WorkerId == workerId && found.LeaseId == leaseId &&
@@ -298,8 +329,8 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
         return false;
     }
 
-    private static WorkerRegistrationResponse RegistrationResponse(PendingWorker pending) =>
-        new(pending.WorkerId, pending.Status, pending.Message);
+    private static WorkerRegistrationResponse RegistrationResponse(PendingWorker registration) =>
+        new(registration.WorkerId, registration.Status, registration.Message);
 
     private static WorkerHeartbeatResponse RejectedHeartbeat(string code, string message) =>
         new(false, message, HeartbeatInterval, new ProtocolError(code, message));
@@ -307,12 +338,16 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
     private static TaskClaimResponse ClaimError(string code, string message) =>
         new(false, null, null, message, new ProtocolError(code, message));
 
+    private static TaskResultResponse ResultError(string code, string message) =>
+        new(false, message, new ProtocolError(code, message));
+
     private static bool IsValid(WorkerRegistrationRequest request) =>
         request is not null && !string.IsNullOrWhiteSpace(request.WorkerName) && request.WorkerName.Length <= 128 &&
         !string.IsNullOrWhiteSpace(request.AgentVersion) && request.AgentVersion.Length <= 64 &&
         !string.IsNullOrWhiteSpace(request.Hostname) && request.Hostname.Length <= 255 &&
         !string.IsNullOrWhiteSpace(request.RequestId) && request.RequestId.Length <= 128 &&
-        request.SupportedBackends is { Count: > 0 and <= 16 } && request.Capabilities is not null && IsValid(request.Capabilities);
+        request.SupportedBackends is { Count: > 0 and <= 16 } && request.SupportedBackends.All(x => !string.IsNullOrWhiteSpace(x) && x.Length <= 64) &&
+        request.Capabilities is not null && IsValid(request.Capabilities);
 
     private static bool IsValid(WorkerCapabilitiesDto capabilities) =>
         capabilities.CpuThreads is >= 1 and <= 1024 && capabilities.AvailableMemoryBytes >= 0 &&
@@ -328,6 +363,9 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
         public WorkerRegistrationStatus Status { get; set; } = WorkerRegistrationStatus.PendingApproval;
         public string Message { get; set; } = "Registration is waiting for coordinator approval.";
     }
+
+    private sealed record ClaimRecord(string RequestId, TaskClaimResponse Response);
+    private sealed record ResultRecord(TaskResultRequest Request, TaskResultResponse Response);
 
     private sealed class WorkerState(WorkerRegistrationRequest request)
     {
