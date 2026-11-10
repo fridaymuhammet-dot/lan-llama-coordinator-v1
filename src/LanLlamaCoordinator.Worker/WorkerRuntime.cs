@@ -9,8 +9,32 @@ public sealed class WorkerRuntime
 
     public WorkerRuntime(string deviceId)
     {
+        if (string.IsNullOrWhiteSpace(deviceId))
+        {
+            throw new ArgumentException("A stable worker device ID is required.", nameof(deviceId));
+        }
+
         DeviceId = deviceId;
         LastHeartbeat = new WorkerHeartbeat { DeviceId = deviceId, Status = DeviceStatus.Online };
+    }
+
+    public WorkerRegistrationRequest CreateRegistrationRequest(
+        string name,
+        DeviceType type,
+        string platform,
+        NetworkType network,
+        DeviceCapability capabilities)
+    {
+        ArgumentNullException.ThrowIfNull(capabilities);
+        return new WorkerRegistrationRequest
+        {
+            DeviceId = DeviceId,
+            Name = name,
+            Type = type,
+            Platform = platform,
+            Network = network,
+            Capabilities = capabilities
+        };
     }
 
     public WorkerHeartbeat ReportStatus(int cpuPercent, int ramPercent, int gpuPercent, int temperatureC)
@@ -23,11 +47,7 @@ public sealed class WorkerRuntime
             CpuPercent = cpuPercent,
             RamPercent = ramPercent,
             GpuPercent = gpuPercent,
-            TemperatureC = temperatureC,
-            Models = new List<ModelInfo>
-            {
-                new() { Name = "default-model", Format = "gguf", Loaded = false, MemoryMb = 2048, Compatible = true }
-            }
+            TemperatureC = temperatureC
         };
 
         return LastHeartbeat;
