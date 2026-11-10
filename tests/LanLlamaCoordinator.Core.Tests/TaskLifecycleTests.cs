@@ -1,5 +1,6 @@
 using LanLlamaCoordinator.Core.Models;
 using LanLlamaCoordinator.Core.Services;
+using TaskStatus = LanLlamaCoordinator.Core.Models.TaskStatus;
 
 namespace LanLlamaCoordinator.Core.Tests;
 
