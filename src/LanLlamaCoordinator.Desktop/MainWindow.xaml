@@ -1,0 +1,11 @@
+<Window x:Class="LanLlamaCoordinator.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="LAN Llama Coordinator" Height="450" Width="800">
+    <Grid Margin="12">
+        <StackPanel>
+            <TextBlock Text="LAN Llama Coordinator" FontSize="24" FontWeight="Bold" Margin="0,0,0,12"/>
+            <TextBlock Text="Device registry, health checks, and worker scheduling are initialized in the core services." TextWrapping="Wrap"/>
+        </StackPanel>
+    </Grid>
+</Window>

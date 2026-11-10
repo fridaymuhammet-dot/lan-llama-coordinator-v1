@@ -1,0 +1,45 @@
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31912.0
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanLlamaCoordinator.Core", "src/LanLlamaCoordinator.Core/LanLlamaCoordinator.Core.csproj", "{4E7BE24D-0B8C-4A26-9234-CBAA30B6B061}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanLlamaCoordinator.Infrastructure", "src/LanLlamaCoordinator.Infrastructure/LanLlamaCoordinator.Infrastructure.csproj", "{A37B89A0-67A2-427A-877A-1E1E34B85A22}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanLlamaCoordinator.Worker", "src/LanLlamaCoordinator.Worker/LanLlamaCoordinator.Worker.csproj", "{4100AB12-4D8B-421D-BD3C-8904600A2A9E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanLlamaCoordinator.Desktop", "src/LanLlamaCoordinator.Desktop/LanLlamaCoordinator.Desktop.csproj", "{7A309BC8-E5B4-40F1-A696-29B3198843F8}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "LanLlamaCoordinator.Core.Tests", "tests/LanLlamaCoordinator.Core.Tests/LanLlamaCoordinator.Core.Tests.csproj", "{E2E6C83D-0A0D-499E-B372-5A4B5D17C7C8}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4E7BE24D-0B8C-4A26-9234-CBAA30B6B061}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4E7BE24D-0B8C-4A26-9234-CBAA30B6B061}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4E7BE24D-0B8C-4A26-9234-CBAA30B6B061}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4E7BE24D-0B8C-4A26-9234-CBAA30B6B061}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A37B89A0-67A2-427A-877A-1E1E34B85A22}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A37B89A0-67A2-427A-877A-1E1E34B85A22}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A37B89A0-67A2-427A-877A-1E1E34B85A22}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A37B89A0-67A2-427A-877A-1E1E34B85A22}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4100AB12-4D8B-421D-BD3C-8904600A2A9E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4100AB12-4D8B-421D-BD3C-8904600A2A9E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4100AB12-4D8B-421D-BD3C-8904600A2A9E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4100AB12-4D8B-421D-BD3C-8904600A2A9E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{7A309BC8-E5B4-40F1-A696-29B3198843F8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{7A309BC8-E5B4-40F1-A696-29B3198843F8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{7A309BC8-E5B4-40F1-A696-29B3198843F8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{7A309BC8-E5B4-40F1-A696-29B3198843F8}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E2E6C83D-0A0D-499E-B372-5A4B5D17C7C8}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E2E6C83D-0A0D-499E-B372-5A4B5D17C7C8}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E2E6C83D-0A0D-499E-B372-5A4B5D17C7C8}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E2E6C83D-0A0D-499E-B372-5A4B5D17C7C8}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+EndGlobal
