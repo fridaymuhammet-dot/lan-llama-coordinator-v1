@@ -1,4 +1,5 @@
 using LanLlamaCoordinator.Core.Models;
+using TaskStatus = LanLlamaCoordinator.Core.Models.TaskStatus;
 
 namespace LanLlamaCoordinator.Core.Services;
 
