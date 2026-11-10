@@ -2,7 +2,7 @@
 
 Windows-first masaüstü uygulaması; güvenilir yerel ağdaki laptopları ve uygun olduğunda cep telefonlarını kullanarak yerel LLM çıkarımını izlemeyi ve koordine etmeyi hedefler.
 
-> **Durum:** Tasarım / başlangıç aşamasında. Bu depoda henüz çalışan uygulama kodu yok. Telefonların ve farklı donanımların ortak bir modeli çalıştırıp çalıştıramayacağı, seçilecek inference backend'iyle doğrulanmalıdır.
+> **Durum:** Erken prototip. .NET çözüm iskeleti, Core modelleri/servisleri ve WPF ekranı repoda bulunuyor. Ancak worker kayıt ve heartbeat kodu henüz gerçek HTTP/TLS ağına bağlı değil; UI'daki cihaz ekleme ve görev işlemleri yerel prototip davranışıdır, gerçek inference çalıştırmaz.
 
 ## Teknoloji temeli
 
@@ -16,40 +16,44 @@ Windows-first masaüstü uygulaması; güvenilir yerel ağdaki laptopları ve uy
 ```text
 .
 ├── docs/
-│   └── architecture.md                         # Bileşenler, cihazlar ve çalışma modları
+│   ├── architecture.md
+│   ├── network-api-design.md                  # Worker API sözleşmesi ve güvenlik tasarımı
+│   ├── device-management.md
+│   ├── worker-protocol.md
+│   └── roles-and-pairing.md
 ├── src/
-│   ├── LanLlamaCoordinator.Desktop/            # Windows WPF koordinatör arayüzü
+│   ├── LanLlamaCoordinator.Desktop/           # Windows WPF koordinatör arayüzü
 │   ├── LanLlamaCoordinator.Core/               # Modeller, protokoller ve koordinasyon kuralları
 │   ├── LanLlamaCoordinator.Infrastructure/     # Ağ, yapılandırma ve inference adaptörleri
-│   ├── LanLlamaCoordinator.Worker/             # Laptop/masaüstü arka plan worker'ı
-│   └── LanLlamaCoordinator.Mobile/             # Sonraki aşama: mobil worker uygulaması
+│   ├── LanLlamaCoordinator.Worker/             # Laptop/masaüstü worker prototipi
+│   └── LanLlamaCoordinator.Mobile/              # Sonraki aşama: mobil worker
 └── tests/
-    └── LanLlamaCoordinator.Core.Tests/         # Core birim testleri
+    └── LanLlamaCoordinator.Core.Tests/
 ```
 
 ## Hedeflenen geliştirme aşamaları
 
-1. Koordinatör, cihaz kaydı ve örnek/simüle worker'larla sağlık görünümü.
-2. Kullanıcının açıkça eklediği laptoplarda worker servisi ve kaynak/uyumluluk raporu.
-3. Android telefonlarda, uygulama ve donanımın desteklediği ölçüde isteğe bağlı worker desteği.
-4. Bir isteği uygun tek cihaza yönlendirme ve kuyruklama.
-5. Ancak backend, model ve cihaz uyumluluğu kanıtlandıktan sonra tek bir modelin birden çok cihaz arasında bölünmesini deneme.
+1. Coordinator, simüle worker'lar ve sağlık görünümü.
+2. Tek Windows Worker: onaylı eşleştirme, HTTPS heartbeat ve durum görünümü.
+3. Önceden başlatılmış, yerel Worker'a bağlı inference backend'ine tek isteği yönlendirme.
+4. Birden fazla laptop için kuyruk ve failover.
+5. Android worker ve çok cihazlı model bölme araştırması; yalnızca backend/cihaz ölçümleri destekliyorsa.
 
-## Önemli: dağıtık çalışma biçimleri
+## Dağıtık çalışma biçimleri
 
-Birden fazla cihazda ayrı istekleri çalıştırmak, tek bir büyük modeli cihazlara bölmekle aynı şey değildir. İlk sürümlerde cihaz seçimi, sağlık kontrolü ve istek kuyruğu hedeflenir. Modeli bölerek çalıştırma; uyumlu inference backend'i, model biçimi, donanım belleği ve hızlı/düşük gecikmeli ağ gerektiren ayrı bir araştırma aşamasıdır. Telefonlar otomatik olarak her modelin bir parçasını çalıştırabilir varsayılmamalıdır.
+Birden fazla cihazda ayrı istekleri çalıştırmak, tek bir büyük modeli cihazlara bölmekle aynı şey değildir. İlk sürümde bir istek tek uyumlu Worker'a gönderilir. Model bölme; backend, model biçimi, bellek ve ağ uyumluluğu ölçülmeden hedeflenmez.
 
 ## Güvenlik ve gizlilik
 
-- Cihazlar otomatik olarak ağa katılmaz: kullanıcı onayı ve eşleştirme gerekir; cihaz erişimi sonradan iptal edilebilir.
-- Worker protokolü yalnızca tanımlı inference ve sağlık işlemlerini sunmalı; genel amaçlı uzaktan komut çalıştırmamalıdır.
-- Ağ trafiği kimliği doğrulanmış ve şifrelenmiş olmalı; sadece güvenilen LAN'da kullanılmalıdır.
-- İstek metni ve model verisi worker cihazlara gidebilir; kullanıcı bu aktarımı bilmeli ve izin vermelidir.
-- Telefon worker'ı kaynak kullanımını açıkça göstermeli; pil, sıcaklık ve işletim sistemi kısıtlarına uymalıdır. Kullanıcı durdurabilmelidir.
+- Cihazlar onaylı eşleştirme olmadan güvenilir sayılmaz.
+- Ağ iletişimi uygulanırken HTTPS/TLS, Worker başına iptal edilebilir kimlik ve Coordinator sertifika doğrulaması zorunludur. “LAN içinde” olmak tek başına güvenlik sağlamaz.
+- Worker sadece tanımlı inference ve sağlık işlemlerini sunmalı; genel amaçlı uzaktan komut çalıştırmamalıdır.
+- Prompt ve sonuç Worker'a aktarılabileceğinden kullanıcı hangi cihazın çalıştıracağını görmeli; hassas içerik varsayılan loglardan çıkarılmalıdır.
+- Worker ve model backend'leri internete açılmamalı; portlar güvenlik duvarıyla sınırlandırılmalıdır.
 
 ## Geliştirme
 
-Uygulama projeleri henüz eklenmedi. Proje iskeleti eklendikten sonra derleme, çalıştırma ve test komutları eklenecektir.
+Gerçek ağ API'si henüz uygulanmadı. Tasarım ve endpoint sözleşmesi için [Network API design](docs/network-api-design.md) ve [Architecture](docs/architecture.md) belgelerine bakın. Derleme/çalıştırma/test adımları, ilk doğrulanmış build'den sonra eklenecektir.
 
 ## Lisans
 
