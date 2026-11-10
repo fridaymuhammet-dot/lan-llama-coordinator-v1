@@ -29,19 +29,33 @@ public class WorkerRegistrationTests
         Assert.True(approved!.Trusted);
         Assert.Equal(DeviceStatus.Offline, approved.Status);
 
-        var accepted = service.ReceiveHeartbeat(new WorkerHeartbeat
-        {
-            DeviceId = "worker-1",
-            TimestampUtc = DateTimeOffset.UtcNow,
-            Status = DeviceStatus.Online,
-            CpuPercent = 10,
-            RamPercent = 30,
-            GpuPercent = 0,
-            TemperatureC = 45
-        });
+        var accepted = service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-1"));
 
         Assert.True(accepted);
         Assert.Equal(DeviceStatus.Online, approved.Status);
+    }
+
+    [Fact]
+    public void HealthyHeartbeatCanRecoverAnUnhealthyWorker()
+    {
+        var registry = new DeviceRegistryService();
+        var service = new WorkerRegistrationService(registry, new HealthChecker());
+        service.Submit(new WorkerRegistrationRequest
+        {
+            DeviceId = "worker-recovery",
+            Name = "Worker",
+            Platform = "windows",
+            Capabilities = new DeviceCapability { RamGb = 16 }
+        });
+        var worker = service.Approve("worker-recovery");
+        Assert.NotNull(worker);
+
+        var unhealthyHeartbeat = CreateHealthyHeartbeat("worker-recovery") with { CpuPercent = 99 };
+        Assert.False(service.ReceiveHeartbeat(unhealthyHeartbeat));
+        Assert.Equal(DeviceStatus.Unhealthy, worker!.Status);
+
+        Assert.True(service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-recovery")));
+        Assert.Equal(DeviceStatus.Online, worker.Status);
     }
 
     [Fact]
@@ -70,4 +84,15 @@ public class WorkerRegistrationTests
 
         Assert.False(accepted);
     }
+
+    private static WorkerHeartbeat CreateHealthyHeartbeat(string workerId) => new()
+    {
+        DeviceId = workerId,
+        TimestampUtc = DateTimeOffset.UtcNow,
+        Status = DeviceStatus.Online,
+        CpuPercent = 10,
+        RamPercent = 30,
+        GpuPercent = 0,
+        TemperatureC = 45
+    };
 }

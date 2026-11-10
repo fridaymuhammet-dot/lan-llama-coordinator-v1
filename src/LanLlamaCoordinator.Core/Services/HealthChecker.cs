@@ -11,12 +11,9 @@ public sealed class HealthChecker : IHealthChecker
 {
     public bool IsHealthy(DeviceInfo device, WorkerHeartbeat heartbeat, TaskRequest? taskRequest = null)
     {
+        // Current lifecycle status must not block recovery: approved workers begin Offline,
+        // and a worker marked Unhealthy must be able to recover on a later valid heartbeat.
         if (device.MaintenanceMode)
-        {
-            return false;
-        }
-
-        if (device.Status == DeviceStatus.Offline || device.Status == DeviceStatus.Unhealthy)
         {
             return false;
         }
