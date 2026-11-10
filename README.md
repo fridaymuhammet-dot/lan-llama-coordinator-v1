@@ -1,13 +1,14 @@
 # LAN Llama Coordinator
 
-Windows-first masaüstü uygulaması: güvenilir yerel ağdaki `llama.cpp` sunucularını ve RPC worker'larını tek yerden izlemek ve koordine etmek.
+Windows-first masaüstü uygulaması; güvenilir yerel ağdaki laptopları ve uygun olduğunda cep telefonlarını kullanarak yerel LLM çıkarımını izlemeyi ve koordine etmeyi hedefler.
 
-> **Durum:** Başlangıç aşamasında. Bu depoda henüz çalışan uygulama kodu yok; aşağıdaki yapı ilk geliştirme adımları için temel oluşturur.
+> **Durum:** Tasarım / başlangıç aşamasında. Bu depoda henüz çalışan uygulama kodu yok. Telefonların ve farklı donanımların ortak bir modeli çalıştırıp çalıştıramayacağı, seçilecek inference backend'iyle doğrulanmalıdır.
 
 ## Teknoloji temeli
 
-- **.NET 8 ve WPF** — Windows masaüstü arayüzü
-- **C#** — uygulama ve servis kodu
+- **.NET 8 ve WPF** — Windows koordinatör arayüzü
+- **C#** — koordinatör ve worker servisleri
+- **Android öncelikli mobil worker** — mobil işletim sistemi ve inference backend'i doğrulandıktan sonra eklenecek
 - **xUnit** — birim testleri
 
 ## Depo düzeni
@@ -15,32 +16,40 @@ Windows-first masaüstü uygulaması: güvenilir yerel ağdaki `llama.cpp` sunuc
 ```text
 .
 ├── docs/
-│   └── architecture.md              # Bileşenler ve temel tasarım kararları
+│   └── architecture.md                         # Bileşenler, cihazlar ve çalışma modları
 ├── src/
-│   ├── LanLlamaCoordinator.Desktop/ # WPF uygulaması ve kullanıcı arayüzü
-│   ├── LanLlamaCoordinator.Core/    # Alan modelleri, arayüzler ve koordinasyon kuralları
-│   └── LanLlamaCoordinator.Infrastructure/ # Ağ, llama.cpp ve yapılandırma adaptörleri
+│   ├── LanLlamaCoordinator.Desktop/            # Windows WPF koordinatör arayüzü
+│   ├── LanLlamaCoordinator.Core/               # Modeller, protokoller ve koordinasyon kuralları
+│   ├── LanLlamaCoordinator.Infrastructure/     # Ağ, yapılandırma ve inference adaptörleri
+│   ├── LanLlamaCoordinator.Worker/             # Laptop/masaüstü arka plan worker'ı
+│   └── LanLlamaCoordinator.Mobile/             # Sonraki aşama: mobil worker uygulaması
 └── tests/
-    └── LanLlamaCoordinator.Core.Tests/ # Core birim testleri
+    └── LanLlamaCoordinator.Core.Tests/         # Core birim testleri
 ```
 
-## Hedeflenen ilk sürüm
+## Hedeflenen geliştirme aşamaları
 
-1. Worker ve sunucu adreslerini yapılandırabilmek.
-2. LAN bileşenlerinin erişilebilirlik durumunu göstermek.
-3. `llama.cpp` sunucu durumunu izlemek.
-4. Worker'ları ve temel sağlık bilgilerini tek ekranda görüntülemek.
-5. Ağ hatalarını anlaşılır biçimde kaydetmek ve göstermek.
+1. Koordinatör, cihaz kaydı ve örnek/simüle worker'larla sağlık görünümü.
+2. Kullanıcının açıkça eklediği laptoplarda worker servisi ve kaynak/uyumluluk raporu.
+3. Android telefonlarda, uygulama ve donanımın desteklediği ölçüde isteğe bağlı worker desteği.
+4. Bir isteği uygun tek cihaza yönlendirme ve kuyruklama.
+5. Ancak backend, model ve cihaz uyumluluğu kanıtlandıktan sonra tek bir modelin birden çok cihaz arasında bölünmesini deneme.
 
-İlk aşamada otomatik görev yönlendirme veya uzaktan komut çalıştırma kapsam dışıdır; önce güvenilir izleme ve yapılandırma hedeflenir.
+## Önemli: dağıtık çalışma biçimleri
 
-## Güvenlik notu
+Birden fazla cihazda ayrı istekleri çalıştırmak, tek bir büyük modeli cihazlara bölmekle aynı şey değildir. İlk sürümlerde cihaz seçimi, sağlık kontrolü ve istek kuyruğu hedeflenir. Modeli bölerek çalıştırma; uyumlu inference backend'i, model biçimi, donanım belleği ve hızlı/düşük gecikmeli ağ gerektiren ayrı bir araştırma aşamasıdır. Telefonlar otomatik olarak her modelin bir parçasını çalıştırabilir varsayılmamalıdır.
 
-Uygulama güvenilir LAN kullanımı için tasarlanıyor. LAN keşfi veya herhangi bir servis erişimi eklendiğinde, güven sınırları ve erişim kontrolleri ayrıca tasarlanmalıdır. Uygulamayı internete açık biçimde çalıştırmayın.
+## Güvenlik ve gizlilik
+
+- Cihazlar otomatik olarak ağa katılmaz: kullanıcı onayı ve eşleştirme gerekir; cihaz erişimi sonradan iptal edilebilir.
+- Worker protokolü yalnızca tanımlı inference ve sağlık işlemlerini sunmalı; genel amaçlı uzaktan komut çalıştırmamalıdır.
+- Ağ trafiği kimliği doğrulanmış ve şifrelenmiş olmalı; sadece güvenilen LAN'da kullanılmalıdır.
+- İstek metni ve model verisi worker cihazlara gidebilir; kullanıcı bu aktarımı bilmeli ve izin vermelidir.
+- Telefon worker'ı kaynak kullanımını açıkça göstermeli; pil, sıcaklık ve işletim sistemi kısıtlarına uymalıdır. Kullanıcı durdurabilmelidir.
 
 ## Geliştirme
 
-Uygulama projeleri henüz eklenmedi. Proje iskeleti eklendikten sonra bu bölüme derleme, çalıştırma ve test komutları konacaktır.
+Uygulama projeleri henüz eklenmedi. Proje iskeleti eklendikten sonra derleme, çalıştırma ve test komutları eklenecektir.
 
 ## Lisans
 
