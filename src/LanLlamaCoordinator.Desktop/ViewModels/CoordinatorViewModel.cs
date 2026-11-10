@@ -201,11 +201,7 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
         SelectedTask.Status = TaskStatus.Assigned;
         SelectedTask.AssignedDeviceId = deviceId;
         Message = $"Görev {SelectedTask.TaskId} cihaz {deviceId} için atanmıştır.";
-        TaskQueue.Clear();
-        foreach (var task in _taskQueue.GetAll())
-        {
-            TaskQueue.Add(task);
-        }
+        RefreshTaskQueue();
     }
 
     private void CompleteSelectedTask()
@@ -219,11 +215,7 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
         _taskLifecycle.Complete(SelectedTask.TaskId, "Örnek sonuç başarılı şekilde tamamlandı.");
         SelectedTask.Status = TaskStatus.Succeeded;
         Message = $"Görev {SelectedTask.TaskId} tamamlandı.";
-        TaskQueue.Clear();
-        foreach (var task in _taskQueue.GetAll())
-        {
-            TaskQueue.Add(task);
-        }
+        RefreshTaskQueue();
     }
 
     private void RetrySelectedTask()
@@ -237,11 +229,17 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
         _taskLifecycle.Retry(SelectedTask.TaskId);
         SelectedTask.Status = TaskStatus.Retrying;
         Message = $"Görev {SelectedTask.TaskId} yeniden deneme için işaretlendi.";
+        RefreshTaskQueue();
+    }
+
+    private void RefreshTaskQueue()
+    {
         TaskQueue.Clear();
         foreach (var task in _taskQueue.GetAll())
         {
             TaskQueue.Add(task);
         }
+        OnPropertyChanged(nameof(TaskCount));
     }
 
     private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
