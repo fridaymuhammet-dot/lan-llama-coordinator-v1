@@ -10,11 +10,15 @@ namespace LanLlamaCoordinator.Desktop.ViewModels;
 public sealed class CoordinatorViewModel : INotifyPropertyChanged
 {
     private readonly DeviceRegistryService _deviceRegistry = new();
+    private readonly DevicePersistenceService _persistence = new();
+    private readonly TaskQueueService _taskQueue = new();
+    private readonly string _storagePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "LanLlamaCoordinator", "devices.json");
     private DeviceInfo? _selectedDevice;
     private string _deviceName = string.Empty;
     private string _selectedDeviceType = "Laptop";
     private string _selectedNetworkType = "Ethernet";
-    private string _message = "Henüz cihaz eklenmedi. Eklenen cihazlar eşleştirme yapılana kadar çevrimdışı ve güvenilmeyen durumdadır.";
+    private string _message = "Uygulama çalışıyor. Cihazları ekleyebilir, iş kuyruğunu izleyebilirsiniz.";
+    private TaskRecord? _selectedTask;
 
     public CoordinatorViewModel()
     {
@@ -22,15 +26,28 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
         NetworkTypes = new ObservableCollection<string>(Enum.GetNames<NetworkType>());
         AddDeviceCommand = new RelayCommand(AddDevice);
         RemoveDeviceCommand = new RelayCommand(RemoveSelectedDevice);
+        EnqueueSampleTaskCommand = new RelayCommand(EnqueueSampleTask);
+
+        var savedDevices = _persistence.Load(_storagePath);
+        foreach (var device in savedDevices)
+        {
+            Devices.Add(device);
+            _deviceRegistry.Register(device);
+        }
+
+        TaskQueue = new ObservableCollection<TaskRecord>(_taskQueue.GetAll());
     }
 
     public ObservableCollection<DeviceInfo> Devices { get; } = new();
     public ObservableCollection<string> DeviceTypes { get; }
     public ObservableCollection<string> NetworkTypes { get; }
+    public ObservableCollection<TaskRecord> TaskQueue { get; }
     public ICommand AddDeviceCommand { get; }
     public ICommand RemoveDeviceCommand { get; }
+    public ICommand EnqueueSampleTaskCommand { get; }
 
     public int DeviceCount => Devices.Count;
+    public int TaskCount => TaskQueue.Count;
 
     public string DeviceName
     {
@@ -54,6 +71,12 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
     {
         get => _selectedDevice;
         set => SetProperty(ref _selectedDevice, value);
+    }
+
+    public TaskRecord? SelectedTask
+    {
+        get => _selectedTask;
+        set => SetProperty(ref _selectedTask, value);
     }
 
     public string Message
@@ -89,14 +112,25 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
             Network = network,
             Status = DeviceStatus.Offline,
             Trusted = false,
-            LastSeenUtc = DateTimeOffset.UtcNow
+            LastSeenUtc = DateTimeOffset.UtcNow,
+            Capabilities = new DeviceCapability
+            {
+                SupportsLlamaCpp = true,
+                SupportsRpc = true,
+                RamGb = 32,
+                VramGb = 0,
+                MaxConcurrency = 2,
+                CpuCores = 8
+            }
         };
 
         _deviceRegistry.Register(device);
         Devices.Add(device);
+        _persistence.Save(Devices, _storagePath);
+
         SelectedDevice = device;
         DeviceName = string.Empty;
-        Message = $"{name} eklendi. Worker bağlantısı ve güvenli eşleştirme henüz uygulanmadı.";
+        Message = $"{name} eklendi. Kayıt kalıcı hale getirildi.";
         OnPropertyChanged(nameof(DeviceCount));
     }
 
@@ -111,9 +145,31 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
         var name = SelectedDevice.Name;
         _deviceRegistry.Remove(SelectedDevice.DeviceId);
         Devices.Remove(SelectedDevice);
+        _persistence.Save(Devices, _storagePath);
+
         SelectedDevice = null;
-        Message = $"{name} yerel listeden kaldırıldı. Bu prototip bağlı worker'a komut göndermez.";
+        Message = $"{name} cihaz listeden kaldırıldı.";
         OnPropertyChanged(nameof(DeviceCount));
+    }
+
+    private void EnqueueSampleTask()
+    {
+        var task = new TaskRecord
+        {
+            TaskId = Guid.NewGuid().ToString("N"),
+            ModelName = "qwen2.5-coder-7b",
+            Prompt = "Yerel ağ üzerinde uygun worker ile çalışacak örnek istek.",
+            Status = TaskStatus.Queued,
+            RetryCount = 0,
+            MaxRetries = 3
+        };
+
+        _taskQueue.Enqueue(task);
+        TaskQueue.Add(task);
+
+        SelectedTask = task;
+        Message = $"Örnek görev kuyruğa eklendi: {task.TaskId}";
+        OnPropertyChanged(nameof(TaskCount));
     }
 
     private void SetProperty<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)

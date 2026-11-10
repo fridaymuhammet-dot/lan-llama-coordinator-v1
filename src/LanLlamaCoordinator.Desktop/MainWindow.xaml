@@ -1,7 +1,7 @@
 <Window x:Class="LanLlamaCoordinator.Desktop.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="LAN Llama Coordinator" Height="650" Width="1050" MinHeight="500" MinWidth="800"
+        Title="LAN Llama Coordinator" Height="700" Width="1150" MinHeight="540" MinWidth="900"
         Background="#F3F5F8">
     <Grid Margin="24">
         <Grid.RowDefinitions>
@@ -31,6 +31,7 @@
                     <ColumnDefinition Width="1.2*" />
                     <ColumnDefinition Width="1.2*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Margin="0,0,12,0">
                     <TextBlock Text="Cihaz adı" FontWeight="SemiBold" Margin="0,0,0,6" />
@@ -44,21 +45,38 @@
                     <TextBlock Text="Bağlantı" FontWeight="SemiBold" Margin="0,0,0,6" />
                     <ComboBox ItemsSource="{Binding NetworkTypes}" SelectedItem="{Binding SelectedNetworkType}" Height="34" Padding="6" />
                 </StackPanel>
-                <Button Grid.Column="3" Content="+ Cihaz ekle" Command="{Binding AddDeviceCommand}" Height="34" Padding="14,0" VerticalAlignment="Bottom" Background="#175CD3" Foreground="White" BorderThickness="0" />
+                <Button Grid.Column="3" Content="+ Cihaz ekle" Command="{Binding AddDeviceCommand}" Height="34" Padding="14,0" VerticalAlignment="Bottom" Background="#175CD3" Foreground="White" BorderThickness="0" Margin="0,0,8,0" />
+                <Button Grid.Column="4" Content="Örnek görev" Command="{Binding EnqueueSampleTaskCommand}" Height="34" Padding="14,0" VerticalAlignment="Bottom" Background="#039855" Foreground="White" BorderThickness="0" />
             </Grid>
         </Border>
 
-        <DataGrid Grid.Row="2" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal" Background="White" BorderThickness="0" RowHeight="44" ColumnHeaderHeight="38">
-            <DataGrid.Columns>
-                <DataGridTextColumn Header="Cihaz" Binding="{Binding Name}" Width="2*" />
-                <DataGridTextColumn Header="Tür" Binding="{Binding Type}" Width="*" />
-                <DataGridTextColumn Header="Platform" Binding="{Binding Platform}" Width="*" />
-                <DataGridTextColumn Header="Bağlantı" Binding="{Binding Network}" Width="*" />
-                <DataGridTextColumn Header="Durum" Binding="{Binding Status}" Width="*" />
-                <DataGridCheckBoxColumn Header="Güvenilir" Binding="{Binding Trusted}" Width="*" />
-                <DataGridTextColumn Header="Son görülme (UTC)" Binding="{Binding LastSeenUtc, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}" Width="1.5*" />
-            </DataGrid.Columns>
-        </DataGrid>
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2.2*" />
+                <ColumnDefinition Width="1.1*" />
+            </Grid.ColumnDefinitions>
+
+            <DataGrid Grid.Column="0" ItemsSource="{Binding Devices}" SelectedItem="{Binding SelectedDevice}" AutoGenerateColumns="False" IsReadOnly="True" CanUserAddRows="False" HeadersVisibility="Column" GridLinesVisibility="Horizontal" Background="White" BorderThickness="0" RowHeight="44" ColumnHeaderHeight="38">
+                <DataGrid.Columns>
+                    <DataGridTextColumn Header="Cihaz" Binding="{Binding Name}" Width="2*" />
+                    <DataGridTextColumn Header="Tür" Binding="{Binding Type}" Width="*" />
+                    <DataGridTextColumn Header="Platform" Binding="{Binding Platform}" Width="*" />
+                    <DataGridTextColumn Header="Bağlantı" Binding="{Binding Network}" Width="*" />
+                    <DataGridTextColumn Header="Durum" Binding="{Binding Status}" Width="*" />
+                    <DataGridCheckBoxColumn Header="Güvenilir" Binding="{Binding Trusted}" Width="*" />
+                    <DataGridTextColumn Header="Son görülme (UTC)" Binding="{Binding LastSeenUtc, StringFormat={}{0:yyyy-MM-dd HH:mm:ss}}" Width="1.5*" />
+                </DataGrid.Columns>
+            </DataGrid>
+
+            <Border Grid.Column="1" Background="White" Margin="14,0,0,0" CornerRadius="10" Padding="14">
+                <StackPanel>
+                    <TextBlock Text="Görev Kuyruğu" FontSize="18" FontWeight="Bold" Foreground="#182230" Margin="0,0,0,12" />
+                    <TextBlock Text="Toplam görev:" Foreground="#667085" />
+                    <TextBlock Text="{Binding TaskCount}" FontWeight="Bold" FontSize="22" Foreground="#175CD3" Margin="0,0,0,12" />
+                    <ListBox ItemsSource="{Binding TaskQueue}" DisplayMemberPath="TaskId" Height="260" />
+                </StackPanel>
+            </Border>
+        </Grid>
 
         <DockPanel Grid.Row="3" Margin="0,14,0,0">
             <TextBlock Text="{Binding Message}" TextWrapping="Wrap" Foreground="#475467" VerticalAlignment="Center" />
