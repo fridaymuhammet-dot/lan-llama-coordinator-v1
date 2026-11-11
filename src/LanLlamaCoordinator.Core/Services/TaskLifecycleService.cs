@@ -26,6 +26,7 @@ public sealed class TaskLifecycleService : ITaskLifecycleService
     public void Enqueue(TaskRecord task)
     {
         task.Status = TaskStatus.Queued;
+        task.AssignedDeviceId = string.Empty;
         task.UpdatedUtc = DateTimeOffset.UtcNow;
         _queueService.Enqueue(task);
     }
@@ -66,6 +67,7 @@ public sealed class TaskLifecycleService : ITaskLifecycleService
         }
 
         task.Status = TaskStatus.Succeeded;
+        task.AssignedDeviceId = string.Empty;
         task.ResultSummary = summary;
         task.UpdatedUtc = DateTimeOffset.UtcNow;
         _queueService.Update(task);
@@ -80,6 +82,7 @@ public sealed class TaskLifecycleService : ITaskLifecycleService
         }
 
         task.Status = TaskStatus.Failed;
+        task.AssignedDeviceId = string.Empty;
         task.ResultSummary = reason;
         task.UpdatedUtc = DateTimeOffset.UtcNow;
         _queueService.Update(task);
@@ -96,7 +99,8 @@ public sealed class TaskLifecycleService : ITaskLifecycleService
         if (task.RetryCount >= task.MaxRetries)
         {
             task.Status = TaskStatus.Failed;
-            task.ResultSummary = "Maksimum yeniden deneme sayısına ulaşıldı.";
+            task.AssignedDeviceId = string.Empty;
+            task.ResultSummary = "Maximum retry attempts reached.";
             task.UpdatedUtc = DateTimeOffset.UtcNow;
             _queueService.Update(task);
             return;
@@ -104,6 +108,8 @@ public sealed class TaskLifecycleService : ITaskLifecycleService
 
         task.RetryCount += 1;
         task.Status = TaskStatus.Retrying;
+        task.AssignedDeviceId = string.Empty;
+        task.ResultSummary = string.Empty;
         task.UpdatedUtc = DateTimeOffset.UtcNow;
         _queueService.Update(task);
     }
