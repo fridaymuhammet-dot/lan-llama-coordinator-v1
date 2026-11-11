@@ -114,4 +114,27 @@ public class TaskLifecycleTests
 
         Assert.False(retryPolicy.ShouldRetry(task));
     }
+
+    [Theory]
+    [InlineData(0, 5)]
+    [InlineData(1, 10)]
+    [InlineData(2, 20)]
+    [InlineData(3, 30)]
+    [InlineData(10, 30)]
+    public void RetryPolicy_ShouldUseBoundedExponentialBackoff(int retryCount, int expectedSeconds)
+    {
+        var retryPolicy = new RetryPolicyService();
+        var task = new TaskRecord { RetryCount = retryCount, MaxRetries = 10 };
+
+        Assert.Equal(TimeSpan.FromSeconds(expectedSeconds), retryPolicy.GetDelay(task));
+    }
+
+    [Fact]
+    public void RetryPolicy_ShouldRejectNegativeRetryCountForDelay()
+    {
+        var retryPolicy = new RetryPolicyService();
+        var task = new TaskRecord { RetryCount = -1, MaxRetries = 3 };
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => retryPolicy.GetDelay(task));
+    }
 }
