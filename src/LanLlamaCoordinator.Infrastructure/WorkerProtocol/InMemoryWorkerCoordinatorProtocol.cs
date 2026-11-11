@@ -33,7 +33,11 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
             var existing = _registrations.Values.FirstOrDefault(x => x.Request.RequestId == request.RequestId);
             if (existing is not null)
             {
-                return RegistrationResponse(existing);
+                return AreEquivalentRegistrations(existing.Request, request)
+                    ? RegistrationResponse(existing)
+                    : new WorkerRegistrationResponse(string.Empty, WorkerRegistrationStatus.InvalidRequest,
+                        "Request ID has already been used for a different registration.",
+                        new ProtocolError("registration_idempotency_conflict", "Request ID has already been used for a different registration."));
             }
 
             var workerId = Guid.NewGuid().ToString("N");
@@ -328,6 +332,15 @@ public sealed class InMemoryWorkerCoordinatorProtocol : IWorkerCoordinatorProtoc
         item = null!;
         return false;
     }
+
+    private static bool AreEquivalentRegistrations(WorkerRegistrationRequest first, WorkerRegistrationRequest second) =>
+        string.Equals(first.WorkerName, second.WorkerName, StringComparison.Ordinal) &&
+        string.Equals(first.AgentVersion, second.AgentVersion, StringComparison.Ordinal) &&
+        string.Equals(first.Hostname, second.Hostname, StringComparison.Ordinal) &&
+        first.SupportedBackends.SequenceEqual(second.SupportedBackends, StringComparer.OrdinalIgnoreCase) &&
+        first.Capabilities.CpuThreads == second.Capabilities.CpuThreads &&
+        first.Capabilities.AvailableMemoryBytes == second.Capabilities.AvailableMemoryBytes &&
+        first.Capabilities.Gpus.SequenceEqual(second.Capabilities.Gpus);
 
     private static WorkerRegistrationResponse RegistrationResponse(PendingWorker registration) =>
         new(registration.WorkerId, registration.Status, registration.Message);
