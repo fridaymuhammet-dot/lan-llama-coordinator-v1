@@ -226,9 +226,19 @@ public sealed class CoordinatorViewModel : INotifyPropertyChanged
             return;
         }
 
-        _taskLifecycle.Retry(SelectedTask.TaskId);
-        SelectedTask.Status = TaskStatus.Retrying;
-        Message = $"Görev {SelectedTask.TaskId} yeniden deneme için işaretlendi.";
+        var taskId = SelectedTask.TaskId;
+        _taskLifecycle.Retry(taskId);
+        var updatedTask = _taskQueue.Get(taskId);
+        if (updatedTask is null)
+        {
+            Message = "Görev kuyruğunda bulunamadı.";
+            return;
+        }
+
+        SelectedTask = updatedTask;
+        Message = updatedTask.Status == TaskStatus.Failed
+            ? $"Görev {taskId} başarısız oldu: {updatedTask.ResultSummary}"
+            : $"Görev {taskId} yeniden deneme için işaretlendi. Deneme {updatedTask.RetryCount}/{updatedTask.MaxRetries}.";
         RefreshTaskQueue();
     }
 
