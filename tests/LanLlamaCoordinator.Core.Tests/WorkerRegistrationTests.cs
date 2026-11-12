@@ -6,7 +6,7 @@ namespace LanLlamaCoordinator.Core.Tests;
 public class WorkerRegistrationTests
 {
     [Fact]
-    public void Registration_RequiresOperatorApprovalBeforeHeartbeatIsAccepted()
+    public void Registration_RequiresOperatorApprovalAndPairingTokenBeforeHeartbeatIsAccepted()
     {
         var registry = new DeviceRegistryService();
         var service = new WorkerRegistrationService(registry, new HealthChecker());
@@ -22,17 +22,40 @@ public class WorkerRegistrationTests
 
         Assert.Equal(RegistrationResult.PendingApproval, service.Submit(request));
         Assert.Null(registry.Get("worker-1"));
-        Assert.False(service.ReceiveHeartbeat(new WorkerHeartbeat { DeviceId = "worker-1" }));
+        Assert.False(service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-1"), null));
+        Assert.Null(service.IssuePairingToken("worker-1"));
 
         var approved = service.Approve("worker-1");
         Assert.NotNull(approved);
         Assert.True(approved!.Trusted);
         Assert.Equal(DeviceStatus.Offline, approved.Status);
+        Assert.False(service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-1"), null));
 
-        var accepted = service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-1"));
-
-        Assert.True(accepted);
+        var pairingToken = service.IssuePairingToken("worker-1");
+        Assert.False(string.IsNullOrWhiteSpace(pairingToken));
+        Assert.True(service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-1"), pairingToken));
         Assert.Equal(DeviceStatus.Online, approved.Status);
+    }
+
+    [Fact]
+    public void HeartbeatRejectsWrongAndRevokedPairingTokens()
+    {
+        var registry = new DeviceRegistryService();
+        var service = new WorkerRegistrationService(registry, new HealthChecker());
+        service.Submit(new WorkerRegistrationRequest
+        {
+            DeviceId = "worker-auth",
+            Name = "Worker",
+            Platform = "windows",
+            Capabilities = new DeviceCapability { RamGb = 16 }
+        });
+        service.Approve("worker-auth");
+        var token = service.IssuePairingToken("worker-auth");
+
+        Assert.False(service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-auth"), "wrong-token"));
+        Assert.True(service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-auth"), token));
+        Assert.True(service.RevokePairingToken("worker-auth"));
+        Assert.False(service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-auth"), token));
     }
 
     [Fact]
@@ -49,13 +72,14 @@ public class WorkerRegistrationTests
         });
         var worker = service.Approve("worker-recovery");
         Assert.NotNull(worker);
+        var pairingToken = service.IssuePairingToken("worker-recovery");
 
         var unhealthyHeartbeat = CreateHealthyHeartbeat("worker-recovery");
         unhealthyHeartbeat.CpuPercent = 99;
-        Assert.False(service.ReceiveHeartbeat(unhealthyHeartbeat));
+        Assert.False(service.ReceiveHeartbeat(unhealthyHeartbeat, pairingToken));
         Assert.Equal(DeviceStatus.Unhealthy, worker!.Status);
 
-        Assert.True(service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-recovery")));
+        Assert.True(service.ReceiveHeartbeat(CreateHealthyHeartbeat("worker-recovery"), pairingToken));
         Assert.Equal(DeviceStatus.Online, worker.Status);
     }
 
@@ -71,6 +95,7 @@ public class WorkerRegistrationTests
             Platform = "windows"
         });
         service.Approve("worker-2");
+        var pairingToken = service.IssuePairingToken("worker-2");
 
         var accepted = service.ReceiveHeartbeat(new WorkerHeartbeat
         {
@@ -81,7 +106,7 @@ public class WorkerRegistrationTests
             RamPercent = 0,
             GpuPercent = 0,
             TemperatureC = 40
-        });
+        }, pairingToken);
 
         Assert.False(accepted);
     }
