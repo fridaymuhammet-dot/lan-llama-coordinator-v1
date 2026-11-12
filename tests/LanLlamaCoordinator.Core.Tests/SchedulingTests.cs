@@ -20,7 +20,8 @@ public class SchedulingTests
             Network = NetworkType.Ethernet,
             Status = DeviceStatus.Online,
             Trusted = true,
-            Capabilities = new DeviceCapability { RamGb = 32, SupportsLlamaCpp = true }
+            Capabilities = new DeviceCapability { RamGb = 32, SupportsLlamaCpp = true },
+            LastSeenUtc = DateTimeOffset.UtcNow.AddMinutes(-2)
         };
 
         lifecycle.RegisterOrUpdate(device);
@@ -42,6 +43,55 @@ public class SchedulingTests
     }
 
     [Fact]
+    public void TaskAssignmentService_ShouldRejectStaleDevicesEvenWhenMarkedOnline()
+    {
+        var registry = new DeviceRegistryService();
+        var health = new HealthChecker();
+        var scoring = new CapabilityScoringService();
+        var service = new TaskAssignmentService(registry, health, scoring);
+
+        var stale = new DeviceInfo
+        {
+            DeviceId = "stale-device",
+            Name = "Stale Laptop",
+            Type = DeviceType.Laptop,
+            Network = NetworkType.Wifi,
+            Status = DeviceStatus.Online,
+            Trusted = true,
+            LastSeenUtc = DateTimeOffset.UtcNow.AddMinutes(-2),
+            Capabilities = new DeviceCapability { RamGb = 32, VramGb = 0, SupportsLlamaCpp = true }
+        };
+
+        var healthy = new DeviceInfo
+        {
+            DeviceId = "healthy-device",
+            Name = "Healthy Laptop",
+            Type = DeviceType.Laptop,
+            Network = NetworkType.Ethernet,
+            Status = DeviceStatus.Online,
+            Trusted = true,
+            LastSeenUtc = DateTimeOffset.UtcNow,
+            Capabilities = new DeviceCapability { RamGb = 64, VramGb = 12, SupportsLlamaCpp = true }
+        };
+
+        registry.Register(stale);
+        registry.Register(healthy);
+
+        var task = new TaskRequest
+        {
+            TaskId = "task-stale-check",
+            ModelName = "qwen2.5-coder-7b",
+            RequiresGpu = false,
+            RequiredRamMb = 16384
+        };
+
+        var assignment = service.AssignBestDevice(task);
+
+        Assert.NotNull(assignment);
+        Assert.Equal("healthy-device", assignment!.DeviceId);
+    }
+
+    [Fact]
     public void TaskAssignmentService_ShouldPreferEthernetDevice()
     {
         var registry = new DeviceRegistryService();
@@ -57,6 +107,7 @@ public class SchedulingTests
             Network = NetworkType.Ethernet,
             Status = DeviceStatus.Online,
             Trusted = true,
+            LastSeenUtc = DateTimeOffset.UtcNow,
             Capabilities = new DeviceCapability { RamGb = 64, VramGb = 12, SupportsLlamaCpp = true }
         };
 
@@ -68,6 +119,7 @@ public class SchedulingTests
             Network = NetworkType.Wifi,
             Status = DeviceStatus.Online,
             Trusted = true,
+            LastSeenUtc = DateTimeOffset.UtcNow,
             Capabilities = new DeviceCapability { RamGb = 32, VramGb = 0, SupportsLlamaCpp = true }
         };
 
