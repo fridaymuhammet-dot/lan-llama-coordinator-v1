@@ -26,11 +26,14 @@ public sealed class TaskAssignmentService : ITaskAssignmentService
         ArgumentNullException.ThrowIfNull(devices);
         ArgumentNullException.ThrowIfNull(taskRequest);
 
+        var now = DateTimeOffset.UtcNow;
+
         var device = devices
-            .Where(d => d.Status == DeviceStatus.Online || d.Status == DeviceStatus.Busy)
-            .Where(d => !d.MaintenanceMode)
             .Where(d => d.Trusted)
-            .Where(d => _healthChecker.IsHealthy(d, new WorkerHeartbeat { DeviceId = d.DeviceId, Status = d.Status, TimestampUtc = DateTimeOffset.UtcNow }, taskRequest))
+            .Where(d => !d.MaintenanceMode)
+            .Where(d => d.Status is DeviceStatus.Online or DeviceStatus.Busy)
+            .Where(d => now - d.LastSeenUtc <= TimeSpan.FromSeconds(25))
+            .Where(d => _healthChecker.IsHealthy(d, taskRequest))
             .OrderByDescending(d => _scoringService.Score(d, taskRequest))
             .FirstOrDefault();
 
