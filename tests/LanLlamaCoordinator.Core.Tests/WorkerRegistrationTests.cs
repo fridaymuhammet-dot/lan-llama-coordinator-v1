@@ -50,7 +50,8 @@ public class WorkerRegistrationTests
         var worker = service.Approve("worker-recovery");
         Assert.NotNull(worker);
 
-        var unhealthyHeartbeat = CreateHealthyHeartbeat("worker-recovery") with { CpuPercent = 99 };
+        var unhealthyHeartbeat = CreateHealthyHeartbeat("worker-recovery");
+        unhealthyHeartbeat.CpuPercent = 99;
         Assert.False(service.ReceiveHeartbeat(unhealthyHeartbeat));
         Assert.Equal(DeviceStatus.Unhealthy, worker!.Status);
 
